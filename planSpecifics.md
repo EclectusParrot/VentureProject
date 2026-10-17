@@ -22,10 +22,6 @@
 ### Future Focus (not now):
 - Suggested actions
 
-### Dev Flowchart
-<img width="1982" height="1422" alt="image" src="https://github.com/user-attachments/assets/45096dba-2141-463b-b19a-03ca3f68f175" />
-
-
 
 - Use Slack for email demonstrations
 
