@@ -135,7 +135,6 @@ def triage(ticket: Ticket) -> TriageResult:
 
 
 def run_triage():
-    getNewMail()
     emails = json.loads(accessEmails())  # one JSON string -> list of dicts
     print(f"Fetched {len(emails)} unprocessed emails")
 
