@@ -19,7 +19,6 @@ def markProcessed(email_id):
     con = sql.connect("emailsUsers.db")
     cur = con.cursor()
     cur.execute("UPDATE email_tbl SET processedBool = 1 WHERE ticketID = ?", (email_id,))
-    print([i for i in cur.execute("SELECT * FROM email_tbl")])
     con.commit()
     con.close()
 
@@ -38,8 +37,6 @@ def addNewMailDB(listOfMail):
             cur.execute("UPDATE user_tbl SET emailsSent = ? WHERE senderEmail = ?", (str(int(numEmails)+1), i["Sender"],))
         emailID = str(hash(i["Body"]))[1:9]
         cur.execute("""INSERT INTO email_tbl VALUES (?,?,?,0,?)""", (emailID, i["Subject"], i["Body"], sendID[0][0],))
-        print(cur.execute("SELECT * FROM user_tbl").fetchall())
-        print(cur.execute("SELECT * FROM email_tbl").fetchall())
         con.commit()
         con.close()
         ### If yes, increment emailssent
@@ -47,5 +44,5 @@ def addNewMailDB(listOfMail):
         #MAKE NEW EMAIL IN TABLE, GENERATE ID, LINK
         
 
-if __name__ == "__main__":
-    print(accessEmails())
+# if __name__ == "__main__":
+#     print(accessEmails())

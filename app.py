@@ -9,6 +9,7 @@ from flask import Flask, jsonify, send_from_directory
 from pydantic import ValidationError
 
 from emailManagement import accessEmails, markProcessed
+from makeDatabases import resetDatabases
 from triage import Ticket, triage  # loads the models once at startup
 
 DB = "emailsUsers.db"
@@ -188,6 +189,7 @@ def start_triage():
 @app.post("/api/reset")
 def reset():
     """Demo helper: mark every email unprocessed again and clear saved results."""
+    resetDatabases()
     con = db()
     con.execute("UPDATE email_tbl SET processedBool = 0")
     con.execute("DELETE FROM triage_results")
