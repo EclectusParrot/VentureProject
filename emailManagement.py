@@ -21,5 +21,29 @@ def markProcessed(email_id):
     con.commit()
     con.close()
 
+def addNewMailDB(listOfMail):
+    for i in listOfMail:
+        con = sql.connect("emailsUsers.db")
+        cur = con.cursor()
+        #MAKE NEW USER IN TABLE IF NEEDED, ELSE INCREMEMNT EMAILSENT
+        ### Check if email in userTable
+        sendID = cur.execute("SELECT senderID FROM user_tbl WHERE senderEmail = ?", (i["Sender"],)).fetchall()
+        if sendID == []:
+            sendID = [(str(hash(i["Sender"]))[1:9],)]
+            cur.execute("INSERT INTO user_tbl VALUES (?, ?, ?, ?)", (sendID[0][0], i["Sender"], "2", "1",))
+        else:
+            numEmails = cur.execute("SELECT emailsSent FROM user_tbl WHERE senderEmail = ?", (i["Sender"],)).fetchall()[0][0]
+            cur.execute("UPDATE user_tbl SET emailsSent = ? WHERE senderEmail = ?", (str(int(numEmails)+1), i["Sender"],))
+        emailID = str(hash(i["Body"]))[1:9]
+        cur.execute("""INSERT INTO email_tbl VALUES (?,?,?,0,?)""", (emailID, i["Subject"], i["Body"], sendID[0][0],))
+        print(cur.execute("SELECT * FROM user_tbl").fetchall())
+        print(cur.execute("SELECT * FROM email_tbl").fetchall())
+        con.commit()
+        con.close()
+        ### If yes, increment emailssent
+        ### If no
+        #MAKE NEW EMAIL IN TABLE, GENERATE ID, LINK
+        
+
 if __name__ == "__main__":
     print(accessEmails())

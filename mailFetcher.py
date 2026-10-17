@@ -2,6 +2,7 @@ import poplib as pl
 #import rfc822
 from email import policy
 from email.parser import BytesParser
+from emailManagement import addNewMailDB, accessEmails
 
 def getNewMail():
     newMail = []
@@ -12,7 +13,6 @@ def getNewMail():
     ourmail.user('teamtelevisionteam')
     ourmail.pass_(password)
     for i in range(len(ourmail.list()[1])):
-        print("in")
         for thingy in ourmail.retr(i+1)[1]:
             part = BytesParser(policy=policy.default).parsebytes(thingy)
             if "Subject" in part:
@@ -25,4 +25,4 @@ def getNewMail():
                 body = part.as_string().strip().replace('<div dir="ltr">', '').replace('</div>', '')
         newMail.append({"Subject": subject, "Sender": sender, "Body": body})
     ourmail.quit()
-    print(newMail)
+    addNewMailDB(newMail)
