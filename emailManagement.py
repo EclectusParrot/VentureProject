@@ -16,7 +16,8 @@ def accessEmails():
 def markProcessed(email_id):
     con = sql.connect("emailsUsers.db")
     cur = con.cursor()
-    cur.execute("UPDATE email_tbl SET processedBool = 1 WHERE senderID = ?", (email_id,))
+    cur.execute("UPDATE email_tbl SET processedBool = 1 WHERE ticketID = ?", (email_id,))
+    print([i for i in cur.execute("SELECT * FROM email_tbl")])
     con.commit()
     con.close()
 
