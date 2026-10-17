@@ -1,0 +1,4 @@
+flask
+pydantic>=2
+transformers
+torch

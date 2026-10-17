@@ -1,27 +1,27 @@
-import poplib as pl
-#import rfc822
+import poplib
 from email import policy
 from email.parser import BytesParser
+from email.utils import parseaddr
 
 def getNewMail():
-    newMail = []
-    route = open("password.txt")
-    password = route.read()
-    route.close()
-    ourmail = pl.POP3_SSL('pop.googlemail.com', '995')
-    ourmail.user('teamtelevisionteam')
-    ourmail.pass_(password)
-    for i in range(len(ourmail.list()[1])):
-        for thingy in ourmail.retr(i+1)[1]:
-            part = BytesParser(policy=policy.default).parsebytes(thingy)
-            if "Subject" in part:
-                subject = part.as_string().strip().replace("Subject: ", "")
-            if "From" in part:
-                temp1 = part.as_string().find("<")
-                temp2 = part.as_string().find(">")
-                sender = part.as_string()[temp1+1:temp2]
-            if "div dir" in part.as_string():
-                body = part.as_string().strip().replace('<div dir="ltr">', '').replace('</div>', '').replace('<div>', '\n')
-        newMail.append({"Subject": subject, "Sender": sender, "Body": body})
-    ourmail.quit()
-    return(newMail)
+    with open("password.txt") as f:
+        password = f.read().strip()
+
+    box = poplib.POP3_SSL("pop.gmail.com", 995)
+    box.user("teamtelevisionteam@gmail.com")
+    box.pass_(password)
+    mail = []
+    try:
+        for i in range(1, len(box.list()[1]) + 1):
+            raw = b"\r\n".join(box.retr(i)[1])
+            msg = BytesParser(policy=policy.default).parsebytes(raw)
+            part = msg.get_body(preferencelist=("plain", "html"))
+            body = part.get_content() if part else ""
+            mail.append({
+                "Subject": msg["Subject"] or "",
+                "Sender": parseaddr(msg["From"] or "")[1],
+                "Body": body.strip(),
+            })
+    finally:
+        box.quit()
+    return mail
