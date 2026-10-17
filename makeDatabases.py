@@ -28,10 +28,12 @@ cur.execute("""INSERT INTO user_tbl
 VALUES ('90000000', 'talonlockett59@gmail.com', '3', 1)""")
 
 cur.execute("""INSERT INTO email_tbl
-VALUES ('00000000', 'My Email', 'Help me', True, '90000000')""")
+VALUES ('00000000', 'My Email', 'Help me. My address has changed and I need my parcel redirected. Pleaaseeeee please please please. Thank you.', 0, '90000000')""")
 
-con.commit()
-con.close()
 
 print([i for i in cur.execute("SELECT * FROM email_tbl")])
 print([i for i in cur.execute("SELECT * FROM user_tbl")])
+
+
+con.commit()
+con.close()
