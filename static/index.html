@@ -1,0 +1,252 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Triage Console</title>
+<style>
+  :root {
+    --bg: #f4f6f9; --card: #ffffff; --ink: #18212f; --muted: #6b7686; --line: #e4e8ee;
+    --brand: #3b5bdb; --brand-soft: #edf0ff;
+    --low: #1f9d55; --low-bg: #e6f6ec;
+    --med: #b7791f; --med-bg: #fdf3dc;
+    --high: #d6336c; --high-bg: #fde8ef;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+         font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  header { background: #131b2e; color: #fff; padding: 14px 28px; display: flex;
+           align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; }
+  header h1 { margin: 0; font-size: 17px; font-weight: 650; letter-spacing: .2px; }
+  header h1 span { color: #8da2ff; }
+  .actions { display: flex; align-items: center; gap: 10px; }
+  .status { color: #aab4c8; font-size: 13px; }
+  button { font: inherit; border: 0; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; }
+  .primary { background: var(--brand); color: #fff; }
+  .primary:hover { background: #2f4bc4; }
+  .primary:disabled { opacity: .6; cursor: default; }
+  .ghost { background: transparent; color: #aab4c8; border: 1px solid #36425e; }
+  .ghost:hover { color: #fff; border-color: #6b7a9c; }
+  main { max-width: 1200px; margin: 0 auto; padding: 24px 28px 60px; }
+  .stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 14px; margin-bottom: 20px; }
+  .stat { background: var(--card); border: 1px solid var(--line); border-radius: 12px; padding: 16px 18px; }
+  .stat .label { color: var(--muted); font-size: 12px; text-transform: uppercase; letter-spacing: .6px; }
+  .stat .value { font-size: 28px; font-weight: 700; margin-top: 4px; }
+  .toolbar { display: flex; gap: 10px; margin-bottom: 14px; flex-wrap: wrap; }
+  .toolbar input, .toolbar select { font: inherit; padding: 8px 12px; border: 1px solid var(--line);
+         border-radius: 8px; background: #fff; color: var(--ink); }
+  .toolbar input { flex: 1; min-width: 220px; }
+  .panel { background: var(--card); border: 1px solid var(--line); border-radius: 12px; overflow: hidden; }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .5px;
+       color: var(--muted); padding: 11px 16px; background: #fafbfc; border-bottom: 1px solid var(--line); }
+  td { padding: 13px 16px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+  tr.row { cursor: pointer; }
+  tr.row:hover td { background: #f8f9ff; }
+  tr:last-child td { border-bottom: 0; }
+  .subj { font-weight: 600; }
+  .sub { color: var(--muted); font-size: 12.5px; }
+  .badge { display: inline-block; padding: 3px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+  .b-low { background: var(--low-bg); color: var(--low); }
+  .b-medium { background: var(--med-bg); color: var(--med); }
+  .b-high { background: var(--high-bg); color: var(--high); }
+  .chip { display: inline-block; padding: 3px 10px; border-radius: 6px; background: var(--brand-soft);
+          color: var(--brand); font-size: 12px; font-weight: 600; white-space: nowrap; }
+  .chip.human { background: var(--high-bg); color: var(--high); }
+  .chip.discard { background: #eceff3; color: #5b6574; }
+  .meter { display: flex; align-items: center; gap: 8px; min-width: 120px; }
+  .meter .bar { flex: 1; height: 7px; background: #e9edf3; border-radius: 99px; overflow: hidden; }
+  .meter .fill { height: 100%; border-radius: 99px; }
+  .fill.low { background: var(--low); } .fill.medium { background: #e0a526; } .fill.high { background: var(--high); }
+  .fill.brand { background: var(--brand); }
+  .meter .pct { width: 38px; text-align: right; font-weight: 600; font-variant-numeric: tabular-nums; }
+  .empty { padding: 60px 20px; text-align: center; color: var(--muted); }
+  /* detail drawer */
+  .overlay { position: fixed; inset: 0; background: rgba(15,22,38,.4); display: none; }
+  .overlay.open { display: block; }
+  .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(520px, 100%); background: #fff;
+            box-shadow: -8px 0 30px rgba(0,0,0,.15); padding: 24px; overflow-y: auto; }
+  .drawer h2 { margin: 0 0 4px; font-size: 18px; }
+  .close { float: right; background: #eef1f6; color: var(--ink); padding: 6px 10px; }
+  .section { margin-top: 20px; }
+  .section h3 { margin: 0 0 8px; font-size: 12px; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .body-box { background: #f7f8fa; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px;
+              white-space: pre-wrap; word-break: break-word; max-height: 220px; overflow-y: auto; }
+  .kv { display: grid; grid-template-columns: 130px 1fr; gap: 6px 10px; }
+  .kv div:nth-child(odd) { color: var(--muted); }
+  .reason { background: var(--brand-soft); color: #2d3f9e; border-radius: 6px; padding: 6px 10px; margin-bottom: 6px; font-size: 13px; }
+  .brow { display: grid; grid-template-columns: 70px 1fr; align-items: center; gap: 10px; margin-bottom: 6px; }
+  .note { color: var(--muted); font-size: 12px; margin-top: 8px; }
+  @media (max-width: 820px) { .hide-sm { display: none; } header { padding: 14px 16px; } main { padding: 16px; } }
+</style>
+</head>
+<body>
+<header>
+  <h1>Support <span>Triage Console</span></h1>
+  <div class="actions">
+    <span class="status" id="status">Loading...</span>
+    <button class="ghost" id="resetBtn" title="Mark all emails unprocessed and clear results (demo only)">Reset demo</button>
+    <button class="primary" id="runBtn">Run triage</button>
+  </div>
+</header>
+
+<main>
+  <section class="stats" id="stats"></section>
+
+  <div class="toolbar">
+    <input id="search" placeholder="Search subject, sender or message...">
+    <select id="fRisk">
+      <option value="">All risk levels</option>
+      <option value="high">High</option><option value="medium">Medium</option><option value="low">Low</option>
+    </select>
+    <select id="fRoute"><option value="">All routes</option></select>
+  </div>
+
+  <div class="panel">
+    <table>
+      <thead><tr>
+        <th>Ticket</th><th>Risk</th><th class="hide-sm">Risk confidence</th>
+        <th class="hide-sm">Category</th><th class="hide-sm">Tier</th><th>Routed to</th>
+      </tr></thead>
+      <tbody id="rows"></tbody>
+    </table>
+    <div class="empty" id="empty" style="display:none">No triaged tickets yet. Click "Run triage" to process waiting emails.</div>
+  </div>
+</main>
+
+<div class="overlay" id="overlay"><aside class="drawer" id="drawer"></aside></div>
+
+<script>
+const $ = s => document.querySelector(s);
+// Emails are untrusted input, so every value is escaped before it touches innerHTML.
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c =>
+  ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const RANK = { high: 3, medium: 2, low: 1 };
+let tickets = [];
+
+const routeLabel = r => String(r).replace(/_/g, " ");
+const routeClass = r => r === "human_queue" ? "human" : r === "discard" ? "discard" : "";
+
+function meter(pct, cls) {
+  return `<div class="meter"><div class="bar"><div class="fill ${esc(cls)}" style="width:${Number(pct) || 0}%"></div></div>` +
+         `<span class="pct">${Number(pct) || 0}%</span></div>`;
+}
+
+function filtered() {
+  const q = $("#search").value.toLowerCase();
+  const risk = $("#fRisk").value, route = $("#fRoute").value;
+  return tickets
+    .filter(t => (!risk || t.risk === risk) && (!route || t.route === route) &&
+      (!q || [t.subject, t.sender, t.body, t.ticket_id].join(" ").toLowerCase().includes(q)))
+    .sort((a, b) => (RANK[b.risk] - RANK[a.risk]) || (b.risk_pct - a.risk_pct));
+}
+
+function renderStats() {
+  const n = tickets.length;
+  const human = tickets.filter(t => t.route === "human_queue").length;
+  const high = tickets.filter(t => t.risk === "high").length;
+  const auto = tickets.filter(t => t.route !== "human_queue" && t.route !== "discard").length;
+  const avg = n ? Math.round(tickets.reduce((s, t) => s + t.risk_pct, 0) / n) : 0;
+  const card = (label, value) => `<div class="stat"><div class="label">${label}</div><div class="value">${value}</div></div>`;
+  $("#stats").innerHTML = card("Tickets triaged", n) + card("High risk", high) +
+    card("Needs a human", human) + card("Auto-routed", auto) + card("Avg. confidence", avg + "%");
+}
+
+function renderRoutes() {
+  const sel = $("#fRoute"), cur = sel.value;
+  const routes = [...new Set(tickets.map(t => t.route))].sort();
+  sel.innerHTML = `<option value="">All routes</option>` +
+    routes.map(r => `<option value="${esc(r)}">${esc(routeLabel(r))}</option>`).join("");
+  sel.value = routes.includes(cur) ? cur : "";
+}
+
+function renderRows() {
+  const list = filtered();
+  $("#empty").style.display = list.length ? "none" : "block";
+  $("#rows").innerHTML = list.map(t => `
+    <tr class="row" data-id="${esc(t.ticket_id)}">
+      <td><div class="subj">${esc(t.subject || "(no subject)")}</div>
+          <div class="sub">#${esc(t.ticket_id)} &middot; ${esc(t.sender)}</div></td>
+      <td><span class="badge b-${esc(t.risk)}">${esc(t.risk)}</span></td>
+      <td class="hide-sm">${meter(t.risk_pct, t.risk)}</td>
+      <td class="hide-sm">${esc(t.category)}<div class="sub">${Number(t.category_pct)}% sure</div></td>
+      <td class="hide-sm">${esc(t.tier)}</td>
+      <td><span class="chip ${routeClass(t.route)}">${esc(routeLabel(t.route))}</span></td>
+    </tr>`).join("");
+}
+
+function openDrawer(id) {
+  const t = tickets.find(x => String(x.ticket_id) === String(id));
+  if (!t) return;
+  const bd = t.risk_breakdown || {};
+  const bars = ["low", "medium", "high"].map(k =>
+    `<div class="brow"><span>${k}</span>${meter(bd[k] ?? 0, k)}</div>`).join("");
+  const reasons = (t.reasons || []).length
+    ? t.reasons.map(r => `<div class="reason">${esc(r)}</div>`).join("")
+    : `<div class="sub">No account-context adjustments applied.</div>`;
+  $("#drawer").innerHTML = `
+    <button class="close" id="closeBtn">Close</button>
+    <h2>${esc(t.subject || "(no subject)")}</h2>
+    <div class="sub">#${esc(t.ticket_id)} &middot; ${esc(t.sender)}</div>
+    <div class="section"><h3>Decision</h3>
+      <span class="badge b-${esc(t.risk)}">${esc(t.risk)} risk &middot; ${Number(t.risk_pct)}% sure</span>
+      <span class="chip ${routeClass(t.route)}" style="margin-left:6px">${esc(routeLabel(t.route))}</span></div>
+    <div class="section"><h3>Message</h3><div class="body-box">${esc(t.body || "(empty)")}</div></div>
+    <div class="section"><h3>Risk probabilities</h3>${bars}
+      <div class="note">Model confidence, not guaranteed accuracy.</div></div>
+    <div class="section"><h3>Why it was adjusted</h3>${reasons}</div>
+    <div class="section"><h3>Details</h3><div class="kv">
+      <div>Category</div><div>${esc(t.category)} (${Number(t.category_pct)}% sure)</div>
+      <div>Sentiment</div><div>${esc(t.sentiment)}</div>
+      <div>Account tier</div><div>${esc(t.tier)}</div>
+      <div>Emails sent</div><div>${esc(t.emails_sent)}</div>
+      <div>Triaged at</div><div>${esc(t.triaged_at)}</div></div></div>`;
+  $("#overlay").classList.add("open");
+  $("#closeBtn").onclick = closeDrawer;
+}
+function closeDrawer() { $("#overlay").classList.remove("open"); }
+
+async function load() {
+  const r = await fetch("/api/tickets");
+  tickets = await r.json();
+  renderStats(); renderRoutes(); renderRows();
+}
+
+async function refreshStatus() {
+  const s = await (await fetch("/api/status")).json();
+  const btn = $("#runBtn");
+  btn.disabled = s.running;
+  btn.textContent = s.running ? "Triaging..." : "Run triage";
+  let msg = `${s.pending} email${s.pending === 1 ? "" : "s"} waiting`;
+  if (s.running) msg = "Analysing emails...";
+  else if (s.error) msg = "Error: " + s.error;
+  else if (s.last_run) msg += ` \u00b7 last run ${s.last_run}`;
+  $("#status").textContent = msg;
+  return s;
+}
+
+async function runTriage() {
+  await fetch("/api/triage", { method: "POST" });
+  const timer = setInterval(async () => {
+    const s = await refreshStatus();
+    await load();
+    if (!s.running) clearInterval(timer);
+  }, 1500);
+  refreshStatus();
+}
+
+$("#runBtn").onclick = runTriage;
+$("#resetBtn").onclick = async () => {
+  if (!confirm("Mark all emails as unprocessed and clear saved results?")) return;
+  await fetch("/api/reset", { method: "POST" });
+  await load(); await refreshStatus();
+};
+$("#rows").onclick = e => { const tr = e.target.closest("tr.row"); if (tr) openDrawer(tr.dataset.id); };
+$("#overlay").onclick = e => { if (e.target.id === "overlay") closeDrawer(); };
+document.addEventListener("keydown", e => { if (e.key === "Escape") closeDrawer(); });
+["#search", "#fRisk", "#fRoute"].forEach(s => $(s).addEventListener("input", renderRows));
+
+load(); refreshStatus();
+</script>
+</body>
+</html>

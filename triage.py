@@ -19,7 +19,10 @@ RISK_LABELS = {
 URGENT_PATTERN = re.compile(
     r"\b(urgent|asap|outage|down|charged twice|legal|immediately)\b", re.I
 )
-PRIORITY_TIERS = {"pro", "premium", "business", "enterprise"}  # match your tier names
+PRIORITY_TIERS = {"pro", "premium", "business", "enterprise"}
+TIER_RISK_BOOST = {"free": 0.0, "pro": 0.05, "premium": 0.1, "business": 0.1, "enterprise": 0.15}
+SPAM_VOLUME = 200
+HEAVY_USER = 50 
 
 
 class Ticket(BaseModel):
@@ -47,11 +50,35 @@ class TriageResult(BaseModel):
     risk_breakdown: dict
     sentiment: str
     route: str
+    reasons: list[str] = []
 
 
 def clean(text: str) -> str:
     return re.sub(r"<[^>]+>", " ", text)
 
+
+def apply_context(scores: dict, ticket: Ticket, category: str) -> tuple[dict, list[str]]:
+    """Shift risk probabilities using account context. Returns new scores plus the reasons."""
+    reasons = []
+    tier = ticket.tier.lower()
+
+    # Paying customers: unhappy ones matter more, so push toward medium/high
+    boost = TIER_RISK_BOOST.get(tier, 0.0)
+    if boost and category != "spam":
+        scores["low"] = max(scores["low"] - boost, 0.0)
+        scores["medium"] += boost
+        reasons.append(f"{tier} tier (+{int(boost*100)}% risk weight)")
+
+    # Very high volume from a free account: likely spam/abuse, treat as higher risk
+    if tier == "free" and ticket.emails_sent > SPAM_VOLUME:
+        scores["high"] += 0.2
+        reasons.append(f"free account with {ticket.emails_sent} emails sent")
+    elif ticket.emails_sent > HEAVY_USER and category == "spam":
+        scores["high"] += 0.1
+        reasons.append("high volume + spam-like content")
+
+    total = sum(scores.values())
+    return {k: v / total for k, v in scores.items()}, reasons
 
 def triage(ticket: Ticket) -> TriageResult:
     text = clean(f"{ticket.subject or ''}. {ticket.body or ''}")[:1500]
@@ -62,11 +89,13 @@ def triage(ticket: Ticket) -> TriageResult:
     out = classifier(text, list(RISK_LABELS), hypothesis_template="This email is {}.")
     scores = {RISK_LABELS[l]: s for l, s in zip(out["labels"], out["scores"])}
 
+
     if URGENT_PATTERN.search(text):
         scores["high"] += 0.3
         total = sum(scores.values())
         scores = {k: v / total for k, v in scores.items()}
 
+    scores, reasons = apply_context(scores, ticket, category)
     risk = max(scores, key=scores.get)
     risk_conf = scores[risk]
 
@@ -76,8 +105,10 @@ def triage(ticket: Ticket) -> TriageResult:
 
     if category == "spam" and cat_conf > 0.6:
         route = "discard"
-    elif risk == "high" or risk_conf < 0.6 or cat_conf < 0.4:
+    elif risk == "high" or cat_conf < 0.4:
         route = "human_queue"
+    elif risk_conf < (0.75 if priority_customer else 0.6):
+        route = "human_queue"   # paying customers get human review sooner when the model is unsure
     elif priority_customer and risk != "low":
         route = "priority_queue"
     elif category == "billing":
@@ -98,6 +129,7 @@ def triage(ticket: Ticket) -> TriageResult:
         risk_breakdown={k: round(v * 100) for k, v in scores.items()},
         sentiment=sentiment,
         route=route,
+        reasons=reasons,
     )
 
 
@@ -112,8 +144,8 @@ def run_triage():
             result = triage(ticket)
             results.append(result)
             print(f"[{result.ticket_id}] {result.risk_pct}% sure: {result.risk} risk | "
-                  f"{result.category_pct}% sure: {result.category} | "
-                  f"{result.tier} -> {result.route}")
+                    f"{result.category_pct}% sure: {result.category} | {result.tier} -> {result.route} "
+                    f"{result.reasons}")
             markProcessed(ticket.id)  # only after triage succeeded
         except ValidationError as e:
             missing = [".".join(map(str, err["loc"])) for err in e.errors()]
