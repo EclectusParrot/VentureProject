@@ -3,6 +3,7 @@ import re
 from pydantic import BaseModel, Field, ConfigDict, AliasChoices, ValidationError
 from transformers import pipeline
 from emailManagement import accessEmails, markProcessed
+from mailFetcher import getNewMail
 
 classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 sentiment_model = pipeline(
@@ -134,6 +135,7 @@ def triage(ticket: Ticket) -> TriageResult:
 
 
 def run_triage():
+    getNewMail()
     emails = json.loads(accessEmails())  # one JSON string -> list of dicts
     print(f"Fetched {len(emails)} unprocessed emails")
 
