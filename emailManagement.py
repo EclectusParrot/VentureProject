@@ -9,4 +9,4 @@ def accessEmails():
     newEmails = cur.execute("""SELECT email_tbl.*, user_tbl.senderEmail, user_tbl.subscriptionTier, user_tbl.emailsSent FROM email_tbl INNER JOIN user_tbl ON user_tbl.senderID = email_tbl.senderID WHERE (processedBool = 0)""")
     return json.dumps([dict(i) for i in newEmails.fetchall()])
 
-print(accessEmails())
+#print(accessEmails())

@@ -1,9 +1,8 @@
 import json
 import re
-from dataclasses import dataclass, asdict
+from pydantic import BaseModel, Field, ConfigDict, AliasChoices, ValidationError
 from transformers import pipeline
-from STANDIN import accessEmails
-from pydantic import BaseModel, Field, ConfigDict, ValidationError
+from emailManagement import accessEmails, markProcessed
 
 classifier = pipeline("zero-shot-classification", model="facebook/bart-large-mnli")
 sentiment_model = pipeline(
@@ -12,8 +11,6 @@ sentiment_model = pipeline(
 )
 
 CATEGORIES = ["billing", "technical issue", "account access", "sales inquiry", "spam"]
-URGENT_WORDS = ["urgent", "asap", "outage", "down", "charged twice", "legal", "immediately"]
-
 RISK_LABELS = {
     "a routine low risk email": "low",
     "a medium risk email that needs attention": "medium",
@@ -22,40 +19,49 @@ RISK_LABELS = {
 URGENT_PATTERN = re.compile(
     r"\b(urgent|asap|outage|down|charged twice|legal|immediately)\b", re.I
 )
+PRIORITY_TIERS = {"pro", "premium", "business", "enterprise"}  # match your tier names
+
 
 class Ticket(BaseModel):
     model_config = ConfigDict(populate_by_name=True, coerce_numbers_to_str=True)
 
-    id: str
-    sender: str = Field(alias="from")
-    subject: str
-    body: str
+    id: str = Field(validation_alias=AliasChoices("emailID", "email_id", "id"))
+    sender: str = Field(validation_alias=AliasChoices("senderEmail", "from"))
+    subject: str | None = ""
+    body: str | None = Field(
+        default="",
+        validation_alias=AliasChoices("body", "emailBody", "content", "message", "text"),
+    )
+    tier: str = Field(default="free", validation_alias=AliasChoices("subscriptionTier"))
+    emails_sent: int = Field(default=0, validation_alias=AliasChoices("emailsSent"))
+
 
 class TriageResult(BaseModel):
     ticket_id: str
+    sender: str
+    tier: str
     category: str
-    category_pct: int      # how sure it is about the category
-    risk: str              # low / medium / high
-    risk_pct: int          # how sure it is about the risk level
-    risk_breakdown: dict   # e.g. {"low": 94, "medium": 5, "high": 1}
+    category_pct: int
+    risk: str
+    risk_pct: int
+    risk_breakdown: dict
     sentiment: str
     route: str
+
 
 def clean(text: str) -> str:
     return re.sub(r"<[^>]+>", " ", text)
 
-def triage(ticket: Ticket) -> TriageResult:
-    text = clean(f"{ticket.subject}. {ticket.body}")[:1500]
 
-    # Category + confidence
+def triage(ticket: Ticket) -> TriageResult:
+    text = clean(f"{ticket.subject or ''}. {ticket.body or ''}")[:1500]
+
     cat = classifier(text, CATEGORIES)
     category, cat_conf = cat["labels"][0], cat["scores"][0]
 
-    # Risk level + confidence (scores sum to 1 across the three levels)
     out = classifier(text, list(RISK_LABELS), hypothesis_template="This email is {}.")
     scores = {RISK_LABELS[l]: s for l, s in zip(out["labels"], out["scores"])}
 
-    # Keyword nudge: urgent wording pushes probability toward "high"
     if URGENT_PATTERN.search(text):
         scores["high"] += 0.3
         total = sum(scores.values())
@@ -64,14 +70,16 @@ def triage(ticket: Ticket) -> TriageResult:
     risk = max(scores, key=scores.get)
     risk_conf = scores[risk]
 
-    sent = sentiment_model(text, truncation=True)[0]
-    sentiment = sent["label"].lower()
+    sentiment = sentiment_model(text, truncation=True)[0]["label"].lower()
 
-    # Routing: low confidence goes to a human, whatever the label
+    priority_customer = ticket.tier.lower() in PRIORITY_TIERS
+
     if category == "spam" and cat_conf > 0.6:
         route = "discard"
     elif risk == "high" or risk_conf < 0.6 or cat_conf < 0.4:
         route = "human_queue"
+    elif priority_customer and risk != "low":
+        route = "priority_queue"
     elif category == "billing":
         route = "billing_team"
     elif category == "technical issue":
@@ -81,6 +89,8 @@ def triage(ticket: Ticket) -> TriageResult:
 
     return TriageResult(
         ticket_id=ticket.id,
+        sender=ticket.sender,
+        tier=ticket.tier,
         category=category,
         category_pct=round(cat_conf * 100),
         risk=risk,
@@ -90,25 +100,28 @@ def triage(ticket: Ticket) -> TriageResult:
         route=route,
     )
 
+
 def run_triage():
-    emails = accessEmails()
+    emails = json.loads(accessEmails())  # one JSON string -> list of dicts
     print(f"Fetched {len(emails)} unprocessed emails")
 
     results = []
     for i, item in enumerate(emails):
         try:
-            ticket = (Ticket.model_validate_json(item) if isinstance(item, str)
-                      else Ticket.model_validate(item))
+            ticket = Ticket.model_validate(item)
             result = triage(ticket)
             results.append(result)
-            print(result.model_dump_json())
+            print(f"[{result.ticket_id}] {result.risk_pct}% sure: {result.risk} risk | "
+                  f"{result.category_pct}% sure: {result.category} | "
+                  f"{result.tier} -> {result.route}")
+            markProcessed(ticket.id)  # only after triage succeeded
         except ValidationError as e:
-            print(f"Email #{i}: invalid email ({e.error_count()} problems): {e.errors()[0]['loc']}")
+            missing = [".".join(map(str, err["loc"])) for err in e.errors()]
+            print(f"Email #{i}: bad fields {missing}")
         except Exception as e:
             print(f"Email #{i}: unexpected error ({e})")
-
-    print(f"[{result.ticket_id}] {result.risk_pct}% sure: {result.risk} risk | "f"{result.category_pct}% sure: {result.category} -> {result.route}")
     return results
+
 
 if __name__ == "__main__":
     run_triage()
