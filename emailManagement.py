@@ -3,7 +3,7 @@ import json
 from mailFetcher import getNewMail
 
 def accessEmails():
-    getNewMail()
+    addNewMailDB(getNewMail())
     con = sql.connect("emailsUsers.db")
     con.row_factory = sql.Row
     cur = con.cursor()
