@@ -21,7 +21,7 @@ def getNewMail():
                 temp2 = part.as_string().find(">")
                 sender = part.as_string()[temp1+1:temp2]
             if "div dir" in part.as_string():
-                body = part.as_string().strip().replace('<div dir="ltr">', '').replace('</div>', '')
+                body = part.as_string().strip().replace('<div dir="ltr">', '').replace('</div>', '').replace('<div>', '\n')
         newMail.append({"Subject": subject, "Sender": sender, "Body": body})
     ourmail.quit()
     return(newMail)
