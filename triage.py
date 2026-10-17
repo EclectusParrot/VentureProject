@@ -25,8 +25,8 @@ PRIORITY_TIERS = {"pro", "premium", "business", "enterprise"}  # match your tier
 class Ticket(BaseModel):
     model_config = ConfigDict(populate_by_name=True, coerce_numbers_to_str=True)
 
-    id: str = Field(validation_alias=AliasChoices("emailID", "email_id", "id"))
-    sender: str = Field(validation_alias=AliasChoices("senderEmail", "from"))
+    id: str = Field(validation_alias=AliasChoices("ticketID", "email_id", "id"))
+    sender: str = Field(validation_alias=AliasChoices("senderID", "from"))
     subject: str | None = ""
     body: str | None = Field(
         default="",
